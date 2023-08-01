@@ -734,13 +734,25 @@ struct smart_holder_type_caster : smart_holder_type_caster_load<T>,
         if (policy == return_value_policy::_clif_automatic) {
             policy = return_value_policy::copy;
         }
+        using Constructor = void *(*) (const void *);
+        Constructor copy_ctor = nullptr;
+        Constructor move_ctor = nullptr;
+        if constexpr (std::is_copy_constructible_v<T>) {
+            copy_ctor = [](const void *arg) -> void * { return new T(*reinterpret_cast<const T *>(arg)); };
+        }
+        if constexpr (std::is_move_constructible_v<T>) {
+            move_ctor = [](const void *arg) -> void * {
+                return new T(std::move(*const_cast<T *>(reinterpret_cast<const T *>(arg))));
+            };
+        }
         return cast_const_raw_ptr( // Originally type_caster_generic::cast.
             st.first,
             policy,
             parent,
             st.second,
-            make_constructor::make_copy_constructor(src),
-            make_constructor::make_move_constructor(src));
+            copy_ctor,
+            move_ctor
+        );
     }
 
     static handle cast(T *src, return_value_policy policy, handle parent) {
